@@ -2,7 +2,7 @@ Adrienne St Clair
 November 2023
 
 
-This folder containing all of the data and code used to create our Bond 3 Measures of Success plant species list. 
+This folder contains all of the data and code used to create our Bond 3 Measures of Success plant species list. 
 
 - The final priority species list can be found in the "04_results" folder and is named "Bond priority species.xlsx"
   This table shouldn't be edited outside of formatting. Any meaningful edits should instead be made to the .rmd file in the 01_code folder.
