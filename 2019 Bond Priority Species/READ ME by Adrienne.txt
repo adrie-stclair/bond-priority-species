@@ -15,6 +15,5 @@ This folder containing all of the data and code used to create our Bond 3 Measur
 
 - All of the R code used to create the list can be found in "01_code".
 
-The project files related to this may be found here:
-"\\alex\work\PN\Teams\2019 Bond\01_Protect_and_restore\Measures of success"
+
 
