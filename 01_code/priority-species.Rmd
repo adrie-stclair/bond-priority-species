@@ -1,0 +1,487 @@
+---
+title: "Priority Species for the 2019 Bond"
+author: "Adrienne St Clair and Katy Weil"
+date: "Last updated on: `r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE, echo=FALSE, results='markup', message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# here are the packages we're going to use.
+packages <- c("here", 
+              "tidyverse",
+              "readxl",
+              "xlsx",
+              "knitr",
+              "kableExtra",
+              "skimr")
+
+
+# Check to see if they're installed, load if needed
+package.check <- lapply(
+  packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+
+```
+
+
+
+### Background
+
+This document outlines the development of a priority species list for Bond 3 Measures of
+Success. The final list will be species that may be found within our region and
+designated as a priority on any number of conservation priority lists, e.g. federally listed, state
+listed, Natural Heritage program, etc.  
+  
+Oregon Biodiversity Information Center (ORBIC) maintains a list of rare, threatened, and endangered Species List
+for the state. This data set will be the reference data set for our list. 
+We will filter that data set based on our previously agreed-upon parameters described below.  
+  
+A note about this document. This HTML document is created from the R Markdown file with the same
+name found in the `01_code` folder. The R code to manipulate the data can be viewed
+by toggling on the `Code` buttons on the right side of the screen. 
+
+```{r directories, include=FALSE}
+
+# First, some housekeeping.
+
+code_dir <- "01_code"
+raw_data <- "02_raw-data"
+data_dir <- "03_clean-data"
+results_dir <- "04_results"
+
+```
+
+### Gathering the data
+
+#### The ORBIC master list.
+
+ORBIC is part of the Institute for Natural Resources and maintains
+biodiversity information in Oregon. The lists of rare, threatened, and
+endangered species are updated about every three years. The most current
+lists are from 2019 for vertebrates and invertebrates, while the
+vascular plants were updated in January of 2023 (all may be found here:
+<https://inr.oregonstate.edu/rare-species/oregon-rare-species-publications>). We have
+utilized those three lists to build the reference data set for this priority
+species list. Additionally, we added the Oregon Forest Practices Act as a source of
+priority species. Two species are found on this list that aren't on the ORBIC list, 
+great blue heron and osprey. We'll add those to our list manually.
+
+```{r data_input, results='hide', message=FALSE}
+vasc    <- read_excel(here(raw_data, "2023-rte-vascs.xlsx"))
+verts   <- read_excel(here(raw_data, "2019-rte-verts.xlsx"))
+inverts <- read_excel(here(raw_data, "2019-rte-inverts.xlsx"))
+ofp     <- read_csv  (here(raw_data, "ofp.csv"))
+habitat_plants  <- read_excel(here(raw_data, "habitats_plants.xlsx")) # this habitat data was filled out by Adrienne for each species
+habitat_animals <- read_excel(here(raw_data, "habitats_animals.xlsx")) # this habitat data was filled out by Katy for each species
+vetoes   <- read_csv(here(raw_data, "vetoes.csv")) # these are the species that either Katy or Adrienne felt needed to be vetoed, and the reasons for each of them.
+
+# let's correct those variable data types
+
+vasc <- vasc %>%
+  mutate(across(c(3, 8:12, 14, 16), as.factor)) %>%
+  filter(!is.na(SNAME))
+
+verts <- verts %>%
+  mutate(across(c(3, 9:15, 19, 20), as.factor))
+
+inverts <- inverts %>%
+  mutate(across(c(4, 9:14, 18:22), as.factor))
+
+summary(vasc[c(1, 8:12, 14, 16)])
+
+summary(verts[c(1, 9:14, 16, 18, 19)])
+
+summary(inverts[c(1, 9:16, 18:22)])
+
+# we only want to utilize a few of the columns. Here, we filter out each data set for only the columns of interest.
+vasc <- vasc %>%
+  select(SNAME, SCOMNAME, GENUS_SP, G_RANK, S_RANK, FED, STATE, HP_LIST, ECO_LIST, COUNTY_LIST, NAME_CATEGORY) %>%
+  rename("COUNTY" = "COUNTY_LIST")
+
+verts <- verts %>%
+  select(SNAME, SCOMNAME, GENUS_SP, G_RANK, S_RANK, FED, STATE, HP_LIST, ECO, COUNTY, NAME_CATEGORY, ODFW_STRAT, CATEGORY) %>%
+  rename("ECO_LIST" = "ECO") # Make this consistent across data tables
+
+
+inverts <- inverts %>%
+  select(SNAME, SCOMNAME, G_RANK, GENUS_SP, S_RANK, FED, STATE, HP_LIST, ECO, COUNTY, NAME_CATEGORY, ODFW_STRAT, CLASS_COMMON) %>%
+  rename("ECO_LIST" = "ECO") # Make this consistent across data tables
+
+# I'll add the two species that are found on the OFP data but not on the ORBIC
+verts <- verts %>% 
+  add_row(SNAME = "Ardea herodias",    SCOMNAME = "Great blue heron", G_RANK = "G5", S_RANK = "S4", NAME_CATEGORY = "Vertebrate Animal", CATEGORY = "Birds") %>% 
+  add_row(SNAME = "Pandion haliaetus", SCOMNAME = "Osprey",           G_RANK = "G5", S_RANK = "S4", NAME_CATEGORY = "Vertebrate Animal", CATEGORY = "Birds")
+
+# let's add the Oregon Forest Practices Act as a column on the verts data
+verts <-  verts %>% 
+  left_join(ofp) 
+
+
+
+
+
+# and combine them into one data set
+species <- bind_rows(vasc, verts, inverts)
+
+
+# I would like to create a column called Taxa-detail that combines the Category and Class_common columns. This is because the data for the invertebrates has the Class_common label filled out and the vertebrates has the Category column filled out. Plants have neither.
+species <- species %>%
+  unite("Taxa-detail", c(CATEGORY, CLASS_COMMON), sep = ",", na.rm = TRUE) %>%
+  mutate(`Taxa-detail` = na_if(`Taxa-detail`, ""))
+
+vetoes <- vetoes %>%                 # Let's get some of the metadata for the species back.
+  left_join(species) %>%
+  select(NAME_CATEGORY, `Taxa-detail`, SNAME, SCOMNAME, reason)
+
+```
+
+The combined species list for vascular plants, invertebrates, and
+vertebrates from ORBIC has `r nrow(species)` species with `r ncol(species)` relevant columns
+of information such as scientific name, common name, G-rank, S-rank, federal status, etc. 
+It is this list that we will filter by conservation status to create our target list.
+
+```{r include=FALSE}
+skim(species) %>%
+  select(2) %>%
+  kable(col.names = "Variables in our data set") %>%
+  kable_classic(html_font = "Times New Roman", full_width = F, position = "left")
+
+```
+
+<br>
+
+#### Exploring species found in various ecoregions
+
+The ORBIC list is state-wide. We will cull this species by only including species that are regionally relevant. Let's explore which species are found in various ecoregions.  
+<br>
+
+The Willamette Valley ecoregion will be the basis of our data set. How do the West Cascades and Coast Range compare?  
+  
+These species are found in the West Cascades but not in the Willamette Valley:
+```{r}
+# What species are found in the West Cascades but not in the Willamette Valley? 
+# I'll add a column called "outside the counties of interest" just to help preview the list
+
+wc <- species %>%
+  filter(grepl('WC',ECO_LIST) & !grepl('WV', ECO_LIST)) %>%
+  filter(case_when(
+    NAME_CATEGORY == "Vascular Plant" ~ grepl("Colu|Wash|Yamh|Polk|Mari|Clac|Mult", COUNTY),
+    TRUE ~ TRUE
+  )) %>%
+  filter(!SNAME %in% vetoes$SNAME) %>%
+  mutate(`Outside Counties of Interest` =
+         case_when(grepl("Colu|Wash|Yamh|Polk|Mari|Clac|Mult", COUNTY) ~ "",
+                   TRUE ~ "x"))
+
+wc %>% 
+  select(1,2,4:8,13) %>% 
+  kable(col.names = c("Scientific Name", "Common Name", "G Rank", "S Rank", "Fed", "State", "HP List", "OFP")) %>% 
+  kable_classic(html_font = "Times New Roman", full_width = F, position = "left") %>% 
+  scroll_box(width = "100%", height = "600px")
+```
+<br>  
+And these are the species found in the Coast Range that are found in neither of the others:
+``` {r}
+# What species are found in the Coast Range but not in the Willamette Valley or West Cascades? 
+cr <- species %>%
+  filter(grepl('CR',ECO_LIST) & !grepl('WV|WC', ECO_LIST)) %>%
+  filter(case_when(
+    NAME_CATEGORY == "Vascular Plant" ~ grepl("Colu|Wash|Yamh|Polk|Mari|Clac|Mult", COUNTY),
+    TRUE ~ TRUE
+  )) 
+
+cr <- cr %>%
+  mutate(`Outside Counties of Interest` =
+         case_when(grepl("Colu|Wash|Yamh|Polk|Mari|Clac|Mult", COUNTY) ~ "",
+                   TRUE ~ "x"))
+
+cr %>%
+  select(1,2,4:8,13) %>% 
+  kable(col.names = c("Scientific Name", "Common Name", "G Rank", "S Rank", "Fed", "State", "HP List", "OFP")) %>%
+  kable_classic(html_font = "Times New Roman", full_width = F, position = "left") %>% 
+  scroll_box(width = "100%", height = "600px")
+          
+# note that many of these coast range species end up being filtered out at the end 
+```
+
+With this in mind, we will include both the West Cascades and the Coast Range ecoregions and exclude any species that we think wouldn't be found within our Metro area. Those species will be added to the Vetoes list found below.
+
+<br>
+
+#### Exploring the list for listed status
+
+
+The Metro jurisdictional area is found within three ecoregions; Coast Range, West Cascades, and Willamette Valley. Our first filter of the data will be for those three ecoregions.
+```{r}
+species <- species %>%
+  filter(grepl("CR|WC|WV", ECO_LIST)) %>%
+  droplevels()
+```
+
+Let's look at the breakdown of Federal status by taxa. Definitions for each status can be found in the [appendix](#appendix). 
+
+```{r}
+species %>%
+  group_by(NAME_CATEGORY, FED) %>%
+  count() %>%
+  kable(col.names = c("Taxa", "Federal Status", "Count of species"), align = "lcr") %>%
+  kable_classic(html_font = "Times New Roman", full_width = F, position = "left")
+
+```
+
+It seems to be that the in the 2023 copy of the Vascular Plants list by ORBIC, they use the codes "E" and "T" for endangered and threatened, while the 2017 lists for Vertebrates and Invertebrates use the codes "LE" and "LT." To be consistent across all of the lists, I'll make them all "LE" and "LT."  
+
+``` {r}
+species <- species %>%
+  mutate(FED = case_when(
+    FED == "E" ~ "LE",
+    FED == "T" ~ "LT",
+    FED == "T, PDL" ~ "LT, PDL",
+    TRUE ~ as.character(FED)
+  )) %>%
+  mutate(FED = as.factor(FED))
+```
+
+
+```{r results='hide'}
+# here is the range of how Federal Status is written within our data set.
+levels(species$FED)
+```
+
+And here is the breakdown of State Status by Taxa. Definitions for each status can be found at the appendix.
+
+```{r}
+species %>%
+  group_by(NAME_CATEGORY, STATE) %>%
+  count() %>%
+  kable(col.names = c("Taxa", "State status", "Count of species"), align = "lcr") %>%
+  kable_classic(html_font = "Times New Roman", full_width = F, position = "left")
+```
+
+```{r results='hide'}
+# here are the options for State Rank
+levels(species$STATE)
+```
+
+### Creating the Priority Species List  
+
+#### Filtering by conservation status
+
+For our priority list, we want to see the species that are:  
+- Federally endangered, threatened, proposed, candidate, species of concern  
+- State endangered, threatened, or sensitive, proposed  
+- G Rank of G1,G2, or G3  
+- S Rank of S1  
+- On the ODFW Conservation Strategy  
+- ORBIC list 1 and 2  
+- In the Oregon Forest Practices Act
+<br><br>
+
+
+#### Species additions or subtractions
+
+There is one species we want to include even though it doesn't technically meet
+the criteria above: wolverine - <i>Gulo gulo</i> - has been recently found in our region.
+
+The species below are those that either Katy or Adrienne have pulled off the list for various reasons.
+
+```{r}
+vetoes %>%
+  arrange(NAME_CATEGORY,`Taxa-detail`,SNAME) %>%
+  kable(col.names = c("Category", "Sub-category","Latin Name", "Common Name", "Reason for removal")) %>%
+  kable_classic(html_font = "Times New Roman", position = "left", full_width = FALSE) %>%
+  scroll_box(width = "100%", height = "600px")
+  
+```
+
+
+```{r create priority list}
+
+priority <- species %>%
+  filter(grepl("LE|PE|PS|C|PT|LT|`LT, PDL`,PS:C|PS:LE|PS:LT|PS:PT|SOC|`LT, XN`", FED) | # filter by federal status
+    grepl("LE|LT|PE|PT|SC|C|CS|S/SC|SC/S", STATE) |                                     # filter by state status
+    grepl("G1|G2|G3", G_RANK)            |                                              # filter by global rank
+    grepl("S1", S_RANK)                  |                                              # filter by state rank
+    grepl("1|2|1-ex|2-ex", HP_LIST)      |                                              # filter by heritage program
+    grepl("Strategy species", ODFW_STRAT)|                                              # filter by ODFW
+    grepl("x", OregonForestPracticesAct) |                                              # include OFP species 
+    SNAME == "Gulo gulo"                 ) %>%                                          # include wolverine
+  filter(!SNAME %in% vetoes$SNAME) %>%                                                  # remove vetoes
+  filter(case_when(                                                                     # if plant, only these counties
+    NAME_CATEGORY == "Vascular Plant" ~ grepl("Colu|Wash|Yamh|Polk|Mari|Clac|Mult", COUNTY),
+    TRUE ~ TRUE
+  )) %>%
+  droplevels()                                                                          # Clean up those options in genus_sp, etc.
+```
+
+Now we'll clean up the column names and add the habitat data for each of our target species. Note that for the vertebrate and invertebrate animals, this includes all habitats where species could potentially occur during the life cycle.   
+A question may still remain as to how we want to handle grassland/savanna species that are not prairies.   
+  
+And with that, our list is complete. It captures `r nrow(priority)` species. The final excel document can be found in the folder labeled `04_results`. 
+
+```{r message=FALSE, error=FALSE}
+# Let's rename the columns with the column headings we want in the end.
+priority <- priority %>%
+  rename(
+    `Scientific Name` = SNAME,
+    `Common Name` = SCOMNAME,
+    `NatureServe G Rank` = G_RANK,
+    `NatureServe S Rank` = S_RANK,
+    `Federal Status` = FED,
+    `State Status` = STATE,
+    `ORBIC - Heritage Program List` = HP_LIST,
+    `Oregon Conservation Strategy Species for Region and Habitat` = ODFW_STRAT,
+    `Oregon Forest Practices Act` = OregonForestPracticesAct,
+    `Taxa` = NAME_CATEGORY
+  ) %>%
+  mutate(`Oregon Conservation Strategy Species for Region and Habitat` = case_when(
+    `Oregon Conservation Strategy Species for Region and Habitat` == "Strategy species" ~ "x",
+    TRUE ~ `Oregon Conservation Strategy Species for Region and Habitat`
+  ))
+
+priority <- priority %>%
+  select(
+     Taxa,
+     `Taxa-detail`,
+     `Scientific Name`,
+     `Common Name`,
+    `Federal Status`,
+    `NatureServe G Rank`,
+    `NatureServe S Rank`,
+    `State Status`,
+    `ORBIC - Heritage Program List`,
+    `Oregon Conservation Strategy Species for Region and Habitat`,
+    `Oregon Forest Practices Act`,
+  )
+
+habitat <- bind_rows(habitat_animals, habitat_plants)
+# To this priority list, we're going to add the habitat data and remove the columns for ecolist and county
+priority <- priority %>%
+  left_join(habitat)
+
+# are there any that we didn't get a habitat value for? 
+needHabitat <- priority %>% filter_at(vars(12:18), all_vars(is.na(.)))
+
+# no, all of the species have a habitat
+
+priority <- priority %>%
+  mutate(`Common Name` = case_when(
+    `Scientific Name` == "Ammannia robusta" ~ "Scarlet ammannia",
+    TRUE ~ `Common Name`
+  ))
+
+priority <- priority %>% 
+  arrange(Taxa, `Taxa-detail`, `Scientific Name`)
+
+options(knitr.kable.NA = "")
+kable(priority, align = "llllcccccc") %>%
+  kable_classic(html_font = "Times New Roman", full_width = F, position = "left") %>%
+  scroll_box(width = "100%", height = "600px")
+
+
+```
+
+```{r}
+# For Katy we will create a table of misfits. Which species didn't make the cut?
+
+misfits <- species %>%
+  filter(!SNAME %in% priority$`Scientific Name`) %>%
+  filter(!NAME_CATEGORY == "Vascular Plant")
+
+# And I suppose, I would want to look at a similar list.
+oddplantsout <- species %>%
+  filter(!SNAME %in% priority$`Scientific Name`) %>%
+  filter(NAME_CATEGORY == "Vascular Plant")
+```
+
+
+
+***
+
+### Appendix
+### Definitions
+
+```{r create definitions, echo=FALSE}
+definitions <- tribble(
+  ~system, ~levels, ~description,
+  "Federal Listing", "LE", "Listed as an Endangered Species",
+  "Federal Listing", "LT", "Listed as a Threatened Species",
+  "Federal Listing", "PE", "Proposed as an Endangered Species",
+  "Federal Listing", "PT", "Proposed as a Threatened Species",
+  "Federal Listing", "PS", "Partial Status in a portion of a species’ range",
+  "Federal Listing", "C", "Candidate for Listing as Threatened or Endangered",
+  "Federal Listing", "SOC", "Species of Concern - Taxa for which additional information is needed to support a proposal to list under the ESA",
+  "Federal Listing", "R", "Under Review; petitioned for listing",
+  "Federal Listing", "DL", "Delisted",
+  "Federal Listing", "PDL", "Proposed for delisting",
+  "Federal Listing", "XN", "Species for which a population has been artificially established in the wild which is not essential to the survival of the species in the wild",
+  "State Listing (ODA)", "LE", "Listed as an Endangered Species",
+  "State Listing (ODA)", "LT", "Listed as a Threatened Species",
+  "State Listing (ODA)", "PE", "Proposed as an Endangered Species",
+  "State Listing (ODA)", "PT", "Proposed as a Threatened Species",
+  "State Listing (ODA)", "SC", "Sensitive – Critical",
+  "State Listing (ODA)", "S", "Sensitive",
+  "State Listing (ODA)", "CS", "Conservation Strategy Species",
+  "State Listing (ODA)", "C", "Candidate for Listing as Threatened or Endangered",
+  "NatureServe Global Rank", "G1", "Critically Imperiled — At very high risk of extinction or elimination due to very restricted range, very few populations or occurrences, very steep declines, very severe threats, or other factors.",
+  "NatureServe Global Rank", "G2", "Imperiled — At high risk of extinction or elimination due to restricted range, few populations or occurrences, steep declines, severe threats, or other factors.",
+  "NatureServe Global Rank", "G3", "Vulnerable — At moderate risk of extinction or elimination due to a fairly restricted range, relatively few populations or occurrences, recent and widespread declines, threats, or other factors.",
+  "NatureServe Global Rank", "G4", "Apparently Secure — At fairly low risk of extinction or elimination due to an extensive range and/or many populations or occurrences, but with possible cause for some concern as a result of local recent declines, threats, or other factors.",
+  "NatureServe Global Rank", "G5", "Secure — At very low risk of extinction or elimination due to a very extensive range, abundant populations or occurrences, and little to no concern from declines or threats.",
+  "NatureServe State Rank", "S1", "Critically Imperiled - At very high risk of extirpation in the jurisdiction due to very restricted range, very few populations or occurrences, very steep declines, severe threats, or other factors.",
+  "NatureServe State Rank", "S2", "Imperiled — At high risk of extirpation in the jurisdiction due to restricted range, few populations or occurrences, steep declines, severe threats, or other factors.",
+  "NatureServe State Rank", "S3", "Vulnerable — At moderate risk of extirpation in the jurisdiction due to a fairly restricted range, relatively few populations or occurrences, recent and widespread declines, threats, or other factors.",
+  "NatureServe State Rank", "S4", "Apparently Secure — At a fairly low risk of extirpation in the jurisdiction due to an extensive range and/or many populations or occurrences, but with possible cause for some concern as a result of local recent declines, threats, or other factors.",
+  "NatureServe State Rank", "S5", "Secure — At very low or no risk of extirpation in the jurisdiction due to a very extensive range, abundant populations or occurrences, with little to no concern from declines or threats.",
+  "Oregon Conservation Strategy", "Listed", "Species of greated conservation need.",
+  "Heritage Program (ORBIC)", "1", "Threatened or Endangered Throughout Range",
+  "Heritage Program (ORBIC)", "2", "Threatened, Endangered or Extirpated from Oregon, but Secure or Abundant Elsewhere",
+  "Heritage Program (ORBIC)", "3", "Review",
+  "Heritage Program (ORBIC)", "4", "Watch",
+  "Heritage Program (ORBIC)", "1-X", "Presumed extinct",
+  "Heritage Program (ORBIC)", "1-ex", "Extirpated in Oregon, threatened or endangered throughout the rest of its range",
+  "Heritage Program (ORBIC)", "2-ex", "Extirpated in Oregon, secure or abundant elsewhere"
+)
+```
+
+Below you will find a table of definitions for the levels of each
+conservation type:
+
+```{r}
+definitions %>%
+  kbl() %>%
+  kable_classic(html_font = "Times New Roman") %>%
+  column_spec(1, "2in") %>%
+  column_spec(2, "1in")
+```
+
+
+```{r write-to-disk,echo=TRUE}
+
+### Saving the lists
+
+# this one saves a rdata file to use in other R analyses
+saveRDS(priority, here(results_dir, "priority.rds"))
+
+# this one writes the file
+# I've commented this out because I have formatting edits in the current Excel file that I don't want to overwrite unless it is a significant data change
+# write.xlsx(as.data.frame(priority), here(results_dir, "Bond priority species.xlsx"), sheetName = "species", row.names = FALSE, showNA = FALSE, append = FALSE)
+
+# this one adds a second tab with the definitions
+# I've commented this out because I have formatting edits in the current Excel file that I don't want to overwrite unless it is a significant data change
+# write.xlsx(as.data.frame(definitions), here(results_dir, "Bond priority species.xlsx"), sheetName = "definitions", row.names = FALSE, showNA = FALSE, append = TRUE)
+
+# write.xlsx(as.data.frame(misfits), here(data_dir, "non-priority animals.xlsx"), row.names = FALSE, showNA = FALSE)
+# write.xlsx(as.data.frame(oddplantsout), here(data_dir, "non-priority plants.xlsx"), row.names = FALSE, showNA = FALSE)
+```
+
