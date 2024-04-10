@@ -22,7 +22,7 @@ Please feel free to message me with any questions, comments, feedback, etc.
 
 thanks for checking it out!
 
-Adrienne St Clair
+Adrienne St Clair  
 November 2023
 
 
