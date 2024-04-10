@@ -1,4 +1,5 @@
-This project is an example of my work.
+This project is an example of my work in manipulating and cleaning data. 
+
 The goal was to create a list of plant and animal species found within my region that fit within a few parameters of conservation status, resulting in a list of species with priority for conservation. 
 
 
