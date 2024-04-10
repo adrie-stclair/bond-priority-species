@@ -9,8 +9,7 @@ This folder contains all of the data and code used to create our Bond 3 Measures
   This table shouldn't be edited outside of formatting. Any meaningful edits should instead be made to the .rmd file in the 01_code folder.
   Editing the RMD will allow the work to stay current and reproducible.
 
-- To view a narrative description of the process, find the html file in the folder "01_code" called "priority-species.html". 
-  This walks you through how the list was created.
+- To view a narrative description of the process, feel free to view the HTML outut on [nbviewer](https://nbviewer.org/github/adrie-stclair/bond-priority-species/blob/main/01_code/priority-species.html).
 
 - The source data can be found in "02_raw data". 
 
